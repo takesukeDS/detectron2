@@ -199,7 +199,7 @@ class DumpLabelAction(InferenceAction):
     Dump action that outputs results to a pickle file
     """
 
-    COMMAND: ClassVar[str] = "dump-label
+    COMMAND: ClassVar[str] = "dump-label"
 
     @classmethod
     def add_parser(cls: type, subparsers: argparse._SubParsersAction):

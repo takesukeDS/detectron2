@@ -194,6 +194,64 @@ class DumpAction(InferenceAction):
 
 
 @register_action
+class DumpLabelAction(InferenceAction):
+    """
+    Dump action that outputs results to a pickle file
+    """
+
+    COMMAND: ClassVar[str] = "dump-label
+
+    @classmethod
+    def add_parser(cls: type, subparsers: argparse._SubParsersAction):
+        parser = subparsers.add_parser(cls.COMMAND, help="Dump model outputs to a file.")
+        cls.add_arguments(parser)
+        parser.set_defaults(func=cls.execute)
+
+    @classmethod
+    def add_arguments(cls: type, parser: argparse.ArgumentParser):
+        super(DumpAction, cls).add_arguments(parser)
+        parser.add_argument(
+            "--output",
+            metavar="<dump_file>",
+            default="results.pkl",
+            help="File name to save dump to",
+        )
+
+    @classmethod
+    def execute_on_outputs(
+        cls: type, context: Dict[str, Any], entry: Dict[str, Any], outputs: Instances
+    ):
+        image_fpath = entry["file_name"]
+        logger.info(f"Processing {image_fpath}")
+        result = {"file_name": image_fpath}
+        if outputs.has("scores"):
+            result["scores"] = outputs.get("scores").cpu()
+        if outputs.has("pred_boxes"):
+            result["pred_boxes_XYXY"] = outputs.get("pred_boxes").tensor.cpu()
+            if outputs.has("pred_densepose"):
+                if isinstance(outputs.pred_densepose, DensePoseChartPredictorOutput):
+                    extractor = DensePoseResultExtractor()
+                elif isinstance(outputs.pred_densepose, DensePoseEmbeddingPredictorOutput):
+                    extractor = DensePoseOutputsExtractor()
+                result["pred_densepose"] = extractor(outputs)[0][0].labels.cpu()
+        context["results"].append(result)
+
+    @classmethod
+    def create_context(cls: type, args: argparse.Namespace, cfg: CfgNode):
+        context = {"results": [], "out_fname": args.output}
+        return context
+
+    @classmethod
+    def postexecute(cls: type, context: Dict[str, Any]):
+        out_fname = context["out_fname"]
+        out_dir = os.path.dirname(out_fname)
+        if len(out_dir) > 0 and not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        with open(out_fname, "wb") as hFile:
+            torch.save(context["results"], hFile)
+            logger.info(f"Output saved to {out_fname}")
+
+@register_action
 class ShowAction(InferenceAction):
     """
     Show action that visualizes selected entries on an image

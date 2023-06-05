@@ -223,17 +223,17 @@ class DumpLabelAction(InferenceAction):
     ):
         image_fpath = entry["file_name"]
         logger.info(f"Processing {image_fpath}")
-        result = {"file_name": image_fpath}
+        result = [image_fpath]
         if outputs.has("scores"):
-            result["scores"] = outputs.get("scores").cpu()
+            result.append(outputs.get("scores").cpu())
         if outputs.has("pred_boxes"):
-            result["pred_boxes_XYXY"] = outputs.get("pred_boxes").tensor.cpu()
+            result.append(outputs.get("pred_boxes").tensor.cpu())
             if outputs.has("pred_densepose"):
                 if isinstance(outputs.pred_densepose, DensePoseChartPredictorOutput):
                     extractor = DensePoseResultExtractor()
                 elif isinstance(outputs.pred_densepose, DensePoseEmbeddingPredictorOutput):
                     extractor = DensePoseOutputsExtractor()
-                result["pred_densepose"] = extractor(outputs)[0][0].labels.cpu()
+                result.append(extractor(outputs)[0][0].labels.cpu())
         context["results"].append(result)
 
     @classmethod

@@ -222,6 +222,7 @@ class DumpLabelAction(InferenceAction):
             default=[0],
             nargs="+",
             help="Indices of the labels to dump",
+            type=int,
         )
 
     @classmethod

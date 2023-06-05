@@ -216,6 +216,13 @@ class DumpLabelAction(InferenceAction):
             default="results.pkl",
             help="File name to save dump to",
         )
+        parser.add_argument(
+            "--index",
+            metavar="<indices>",
+            default=[0],
+            nargs="+",
+            help="Indices of the labels to dump",
+        )
 
     @classmethod
     def execute_on_outputs(
@@ -233,12 +240,16 @@ class DumpLabelAction(InferenceAction):
                     extractor = DensePoseResultExtractor()
                 elif isinstance(outputs.pred_densepose, DensePoseEmbeddingPredictorOutput):
                     extractor = DensePoseOutputsExtractor()
-                result.append(extractor(outputs)[0][0].labels.cpu() == 0)
+                labels = extractor(outputs)[0][0].labels.cpu()
+                tmp = torch.zeros_like(labels)
+                for i in context["indices"]:
+                    tmp = torch.logical_or(tmp, labels == i)
+                result.append(tmp)
         context["results"].append(result)
 
     @classmethod
     def create_context(cls: type, args: argparse.Namespace, cfg: CfgNode):
-        context = {"results": [], "out_fname": args.output}
+        context = {"results": [], "out_fname": args.output, "indices": args.index}
         return context
 
     @classmethod

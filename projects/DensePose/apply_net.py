@@ -233,7 +233,7 @@ class DumpLabelAction(InferenceAction):
                     extractor = DensePoseResultExtractor()
                 elif isinstance(outputs.pred_densepose, DensePoseEmbeddingPredictorOutput):
                     extractor = DensePoseOutputsExtractor()
-                result.append(extractor(outputs)[0][0].labels.cpu())
+                result.append(extractor(outputs)[0][0].labels.cpu() == 0)
         context["results"].append(result)
 
     @classmethod

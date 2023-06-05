@@ -209,7 +209,7 @@ class DumpLabelAction(InferenceAction):
 
     @classmethod
     def add_arguments(cls: type, parser: argparse.ArgumentParser):
-        super(DumpAction, cls).add_arguments(parser)
+        super(DumpLabelAction, cls).add_arguments(parser)
         parser.add_argument(
             "--output",
             metavar="<dump_file>",

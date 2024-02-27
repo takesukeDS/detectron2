@@ -397,6 +397,156 @@ class ShowAction(InferenceAction):
         return context
 
 
+
+@register_action
+class ShowBulkAction(InferenceAction):
+    """
+    Show action that visualizes selected entries on an image in bulk
+    """
+
+    COMMAND: ClassVar[str] = "show-bulk"
+    VISUALIZERS: ClassVar[Dict[str, object]] = {
+        "dp_contour": DensePoseResultsContourVisualizer,
+        "dp_segm": DensePoseResultsFineSegmentationVisualizer,
+        "dp_u": DensePoseResultsUVisualizer,
+        "dp_v": DensePoseResultsVVisualizer,
+        "dp_iuv_texture": DensePoseResultsVisualizerWithTexture,
+        "dp_cse_texture": DensePoseOutputsTextureVisualizer,
+        "dp_vertex": DensePoseOutputsVertexVisualizer,
+        "bbox": ScoredBoundingBoxVisualizer,
+    }
+
+    @classmethod
+    def add_parser(cls: type, subparsers: argparse._SubParsersAction):
+        parser = subparsers.add_parser(cls.COMMAND, help="Visualize selected entries")
+        cls.add_arguments(parser)
+        parser.set_defaults(func=cls.execute)
+
+    @classmethod
+    def add_arguments(cls: type, parser: argparse.ArgumentParser):
+        super(ShowBulkAction, cls).add_arguments(parser)
+        parser.add_argument(
+            "visualizations",
+            metavar="<visualizations>",
+            help="Comma separated list of visualizations, possible values: "
+            "[{}]".format(",".join(sorted(cls.VISUALIZERS.keys()))),
+        )
+        parser.add_argument(
+            "--min_score",
+            metavar="<score>",
+            default=0.8,
+            type=float,
+            help="Minimum detection score to visualize",
+        )
+        parser.add_argument(
+            "--nms_thresh", metavar="<threshold>", default=None, type=float, help="NMS threshold"
+        )
+        parser.add_argument(
+            "--texture_atlas",
+            metavar="<texture_atlas>",
+            default=None,
+            help="Texture atlas file (for IUV texture transfer)",
+        )
+        parser.add_argument(
+            "--texture_atlases_map",
+            metavar="<texture_atlases_map>",
+            default=None,
+            help="JSON string of a dict containing texture atlas files for each mesh",
+        )
+        parser.add_argument(
+            "--output_format",
+            metavar="<output_format>",
+            default="result_{}.png",
+            help="output_format to save output to. will be formatted with the image file name",
+        )
+        parser.add_argument(
+            "--inplace",
+            action="store_true",
+            help="Overwrite input images with visualizations",
+        )
+        parser.add_argument(
+            "--alpha",
+            metavar="<alpha>",
+            default=1.0,
+            type=float,
+            help="Alpha value for visualizations",
+        )
+
+    @classmethod
+    def setup_config(
+        cls: type, config_fpath: str, model_fpath: str, args: argparse.Namespace, opts: List[str]
+    ):
+        opts.append("MODEL.ROI_HEADS.SCORE_THRESH_TEST")
+        opts.append(str(args.min_score))
+        if args.nms_thresh is not None:
+            opts.append("MODEL.ROI_HEADS.NMS_THRESH_TEST")
+            opts.append(str(args.nms_thresh))
+        cfg = super(ShowBulkAction, cls).setup_config(config_fpath, model_fpath, args, opts)
+        return cfg
+
+    @classmethod
+    def execute_on_outputs(
+        cls: type, context: Dict[str, Any], entry: Dict[str, Any], outputs: Instances
+    ):
+        import cv2
+        import numpy as np
+
+        visualizer = context["visualizer"]
+        extractor = context["extractor"]
+        image_fpath = entry["file_name"]
+        logger.info(f"Processing {image_fpath}")
+        image = cv2.cvtColor(entry["image"], cv2.COLOR_BGR2GRAY)
+        image = np.tile(image[:, :, np.newaxis], [1, 1, 3])
+        data = extractor(outputs)
+        image_vis = visualizer.visualize(image * context["inplace"], data)
+        out_fname = cls._get_out_fname(image_fpath, context["out_fname"])
+        out_dir = os.path.dirname(out_fname)
+        if len(out_dir) > 0 and not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        cv2.imwrite(out_fname, image_vis)
+        logger.info(f"Output saved to {out_fname}")
+        context["entry_idx"] += 1
+
+    @classmethod
+    def postexecute(cls: type, context: Dict[str, Any]):
+        pass
+
+    @classmethod
+    def _get_out_fname(cls: type, image_fpath: str, fname_base: str):
+        base, _ = os.path.splitext(image_fpath)
+        ext = os.path.splitext(fname_base)[1]
+        out_fname = fname_base.format(base) + "." + ext
+        return out_fname
+
+    @classmethod
+    def create_context(cls: type, args: argparse.Namespace, cfg: CfgNode) -> Dict[str, Any]:
+        vis_specs = args.visualizations.split(",")
+        visualizers = []
+        extractors = []
+        for vis_spec in vis_specs:
+            texture_atlas = get_texture_atlas(args.texture_atlas)
+            texture_atlases_dict = get_texture_atlases(args.texture_atlases_map)
+            vis = cls.VISUALIZERS[vis_spec](
+                cfg=cfg,
+                texture_atlas=texture_atlas,
+                texture_atlases_dict=texture_atlases_dict,
+                alpha=args.alpha,
+            )
+            visualizers.append(vis)
+            extractor = create_extractor(vis)
+            extractors.append(extractor)
+        visualizer = CompoundVisualizer(visualizers)
+        extractor = CompoundExtractor(extractors)
+        context = {
+            "extractor": extractor,
+            "visualizer": visualizer,
+            "out_fname": args.output_format,
+            "entry_idx": 0,
+            "inplace": args.inplace,
+        }
+        return context
+
+
 def create_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=DOC,

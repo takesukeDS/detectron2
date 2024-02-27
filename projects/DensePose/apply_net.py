@@ -513,9 +513,8 @@ class ShowBulkAction(InferenceAction):
 
     @classmethod
     def _get_out_fname(cls: type, image_fpath: str, fname_base: str):
-        base, _ = os.path.splitext(image_fpath)
-        ext = os.path.splitext(fname_base)[1]
-        out_fname = fname_base.format(base) + "." + ext
+        fname_image, _ = os.path.splitext(os.path.basename(image_fpath))
+        out_fname = fname_base.format(fname_image)
         return out_fname
 
     @classmethod
